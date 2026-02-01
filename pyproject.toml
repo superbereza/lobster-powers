@@ -37,6 +37,7 @@ lp-browser = "lobster_powers.tools.browser:main"
 lp-notify = "lobster_powers.tools.notify:main"
 lp-tts = "lobster_powers.tools.tts:main"
 lp-web-fetch = "lobster_powers.tools.web_fetch:main"
+lp-web-search = "lobster_powers.tools.web_search:main"
 
 [project.urls]
 Homepage = "https://github.com/superbereza/lobster-powers"
