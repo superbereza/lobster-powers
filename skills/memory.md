@@ -10,25 +10,36 @@ Use `lp-memory` to search your notes, documents, and past decisions.
 ## Quick Examples
 
 ```bash
-# Search for something
-lp-memory search "what auth method did we choose"
-
-# Index files for searching
+# Index files
 lp-memory index ~/notes/
 lp-memory index ./MEMORY.md
 
+# Search
+lp-memory search "what auth method did we choose"
+
 # Read specific lines
 lp-memory read notes/2024-01-15.md --from 42 --lines 20
+
+# Check status
+lp-memory status
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `lp-memory search "query"` | Semantic search |
-| `lp-memory index <path>` | Add files to index |
+| `lp-memory index <path>` | Index file or directory |
+| `lp-memory search "query"` | Hybrid search (vector + FTS) |
 | `lp-memory read <file>` | Read file content |
 | `lp-memory status` | Show index stats |
+| `lp-memory forget <path>` | Remove from index |
+
+## Search Options
+
+| Option | Description |
+|--------|-------------|
+| `--top N` | Return top N results (default: 5) |
+| `--vector-weight 0.7` | Weight for vector vs keyword (0-1) |
 
 ## When to Use
 
@@ -39,16 +50,16 @@ lp-memory read notes/2024-01-15.md --from 42 --lines 20
 - TODOs and task history
 - Project context and history
 
-## Workflow
+## How It Works
 
-1. User asks about past decision
-2. Run `lp-memory search "relevant query"`
-3. Review returned snippets
-4. If needed, `lp-memory read` for full context
-5. Answer based on found information
+1. **Index**: Files are split into chunks (~500 chars)
+2. **Embed**: Each chunk gets an OpenAI embedding
+3. **Search**: Query uses hybrid scoring:
+   - 70% vector similarity (semantic)
+   - 30% FTS BM25 (keywords)
 
-## Tips
+## Cost
 
-- Keep a `MEMORY.md` file in project root with important decisions
-- Use `memory/*.md` for dated notes
-- Re-index after adding new files
+- Model: `text-embedding-3-small` ($0.02/1M tokens)
+- Index 100 files: ~$0.01
+- 1000 searches: ~$0.10
