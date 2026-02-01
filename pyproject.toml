@@ -26,13 +26,15 @@ dependencies = []
 cron = []
 memory = ["numpy", "sentence-transformers"]
 browser = ["playwright"]
-all = ["lobster-powers[cron,memory,browser]"]
+tts = ["edge-tts", "openai", "httpx"]
+all = ["lobster-powers[cron,memory,browser,tts]"]
 
 [project.scripts]
 lp-cron = "lobster_powers.tools.cron:main"
 lp-memory = "lobster_powers.tools.memory:main"
 lp-browser = "lobster_powers.tools.browser:main"
 lp-notify = "lobster_powers.tools.notify:main"
+lp-tts = "lobster_powers.tools.tts:main"
 
 [project.urls]
 Homepage = "https://github.com/superbereza/lobster-powers"
