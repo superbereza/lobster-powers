@@ -10,6 +10,7 @@ Examples:
 
 import argparse
 import platform
+import shlex
 import subprocess
 import sys
 
@@ -34,14 +35,14 @@ def notify_linux(message: str, title: str, urgency: str, icon: str | None) -> bo
         print("Error: notify-send not found. Install with: sudo apt install libnotify-bin", file=sys.stderr)
         return False
     except subprocess.CalledProcessError as e:
-        print(f"Error: {e.stderr.decode() if e.stderr else 'notification failed'}", file=sys.stderr)
+        print(f"Error: {e.stderr.decode(errors='replace') if e.stderr else 'notification failed'}", file=sys.stderr)
         return False
 
 
 def notify_macos(message: str, title: str, urgency: str, icon: str | None) -> bool:
     """Send notification via osascript (macOS)."""
     # osascript doesn't support urgency or custom icons easily
-    script = f'display notification "{message}" with title "{title}"'
+    script = f'display notification {shlex.quote(message)} with title {shlex.quote(title)}'
 
     try:
         subprocess.run(["osascript", "-e", script], check=True, capture_output=True)
@@ -50,7 +51,7 @@ def notify_macos(message: str, title: str, urgency: str, icon: str | None) -> bo
         print("Error: osascript not found", file=sys.stderr)
         return False
     except subprocess.CalledProcessError as e:
-        print(f"Error: {e.stderr.decode() if e.stderr else 'notification failed'}", file=sys.stderr)
+        print(f"Error: {e.stderr.decode(errors='replace') if e.stderr else 'notification failed'}", file=sys.stderr)
         return False
 
 
