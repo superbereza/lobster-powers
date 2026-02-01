@@ -1,58 +1,44 @@
-# openclaw-tools-mcp
+# lobster-powers 🦞💪
 
-OpenClaw tools as MCP server for Claude Code.
+OpenClaw superpowers for any AI agent.
 
-Use powerful OpenClaw tools (cron, browser, memory) directly in Claude Code via MCP protocol.
+Turn Claude Code, Cursor, or any LLM into a full-featured personal assistant with cron jobs, memory search, browser automation, and more.
 
-## Features
+## What is this?
 
-- **Cron** — Schedule tasks and reminders
-- **Memory** — Semantic search across your notes
-- **Browser** — Web automation with Playwright (coming soon)
+OpenClaw is a powerful personal AI assistant with native tools like scheduling, memory, and browser control. But those tools only work inside OpenClaw.
+
+**lobster-powers** extracts these capabilities as standalone CLI tools + skills that work with any AI agent.
+
+## Available Powers
+
+| Power | CLI | What it does |
+|-------|-----|--------------|
+| **cron** | `lp-cron` | Schedule reminders and recurring tasks |
+| **memory** | `lp-memory` | Semantic search over your notes and files |
+| **browser** | `lp-browser` | Automate web interactions |
+| **tts** | `lp-speak` | Text-to-speech |
+| **notify** | `lp-notify` | System notifications |
 
 ## Installation
 
 ```bash
-# Install as Claude Code plugin
-claude plugin install openclaw-tools-mcp
-
-# Or manually
-pip install openclaw-tools-mcp
+pip install lobster-powers
 ```
 
-## Usage
-
-Add to your `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "openclaw": {
-      "command": "python",
-      "args": ["-m", "openclaw_tools_mcp"]
-    }
-  }
-}
+Or install specific tools:
+```bash
+pip install lobster-powers[cron]
+pip install lobster-powers[memory]
+pip install lobster-powers[browser]
 ```
 
-## Requirements
+## Usage with Claude Code
 
-- Python 3.11+
-- OpenClaw Gateway running (for tool execution)
-
-## How it works
-
-```
-Claude Code
-    │
-    │ MCP protocol
-    ▼
-openclaw-tools-mcp (this package)
-    │
-    │ HTTP/WebSocket
-    ▼
-OpenClaw Gateway (executes tools)
-```
+Skills are automatically available. Just ask Claude to:
+- "Remind me to check PRs tomorrow at 9am"
+- "Search my notes for that decision about authentication"
+- "Take a screenshot of the current page"
 
 ## License
 

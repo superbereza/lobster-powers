@@ -1,11 +1,34 @@
 ---
 name: memory
-description: Semantic search and retrieval from memory files
+description: Semantic search over notes and files using lp-memory CLI
 ---
 
 # Memory - Long-term Knowledge
 
-Use `memory_search` and `memory_get` MCP tools to access stored knowledge.
+Use `lp-memory` to search your notes, documents, and past decisions.
+
+## Quick Examples
+
+```bash
+# Search for something
+lp-memory search "what auth method did we choose"
+
+# Index files for searching
+lp-memory index ~/notes/
+lp-memory index ./MEMORY.md
+
+# Read specific lines
+lp-memory read notes/2024-01-15.md --from 42 --lines 20
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `lp-memory search "query"` | Semantic search |
+| `lp-memory index <path>` | Add files to index |
+| `lp-memory read <file>` | Read file content |
+| `lp-memory status` | Show index stats |
 
 ## When to Use
 
@@ -16,57 +39,16 @@ Use `memory_search` and `memory_get` MCP tools to access stored knowledge.
 - TODOs and task history
 - Project context and history
 
-## Tools
-
-### memory_search
-
-Semantic search across all memory files.
-
-```json
-{
-  "query": "what authentication method did we choose",
-  "maxResults": 5
-}
-```
-
-Returns snippets with file paths and line numbers.
-
-### memory_get
-
-Read specific lines from a memory file.
-
-```json
-{
-  "path": "memory/2024-01-15.md",
-  "from": 42,
-  "lines": 20
-}
-```
-
-Use after `memory_search` to get full context.
-
 ## Workflow
 
 1. User asks about past decision
-2. Call `memory_search` with relevant query
+2. Run `lp-memory search "relevant query"`
 3. Review returned snippets
-4. If needed, call `memory_get` for more context
+4. If needed, `lp-memory read` for full context
 5. Answer based on found information
-
-## Example
-
-User: "What did we decide about the database?"
-
-```json
-// Step 1: Search
-{"tool": "memory_search", "query": "database decision"}
-
-// Step 2: Get context if needed
-{"tool": "memory_get", "path": "memory/2024-01-10.md", "from": 15, "lines": 30}
-```
 
 ## Tips
 
-- Be specific in search queries
-- Use `maxResults: 3-5` to keep context small
-- Combine with project MEMORY.md for best results
+- Keep a `MEMORY.md` file in project root with important decisions
+- Use `memory/*.md` for dated notes
+- Re-index after adding new files
