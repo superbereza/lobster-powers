@@ -24,7 +24,7 @@ dependencies = []
 
 [project.optional-dependencies]
 cron = []
-memory = ["numpy", "sentence-transformers"]
+memory = ["openai", "numpy"]
 browser = ["playwright"]
 tts = ["edge-tts", "openai", "httpx"]
 web = ["httpx", "readability-lxml", "lxml", "html2text"]

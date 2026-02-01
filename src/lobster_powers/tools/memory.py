@@ -1,135 +1,431 @@
-"""Memory tools - semantic search and retrieval.
+#!/usr/bin/env python3
+"""
+lp-memory: Semantic search over notes and files.
 
-Based on OpenClaw memory-tool.ts
+Examples:
+    lp-memory index ~/notes/
+    lp-memory index ./MEMORY.md
+    lp-memory search "what auth method did we choose"
+    lp-memory read notes/2024-01.md --from 42 --lines 20
+    lp-memory status
 """
 
-from typing import Any
+import argparse
+import hashlib
+import json
+import os
+import sqlite3
+import struct
+import sys
+from pathlib import Path
 
-from mcp.types import Tool
-
-from ..gateway import OpenClawGateway
-
-SEARCH_DESCRIPTION = """Semantic search across MEMORY.md and memory/*.md files.
-
-Use this tool before answering questions about:
-- Prior work and decisions
-- Dates and timelines
-- People and contacts
-- Preferences and settings
-- TODOs and tasks
-
-Returns top matching snippets with file path and line numbers.
-
-PARAMETERS:
-- query: Search query (required)
-- maxResults: Maximum results to return (optional, default 10)
-- minScore: Minimum similarity score (optional, 0.0-1.0)
-
-EXAMPLE:
-{
-  "query": "what did we decide about authentication",
-  "maxResults": 5
-}
-"""
-
-GET_DESCRIPTION = """Read specific lines from memory files.
-
-Use after memory_search to retrieve full context for a snippet.
-Keeps context small by only pulling needed lines.
-
-PARAMETERS:
-- path: Relative path to file (required)
-- from: Starting line number (optional)
-- lines: Number of lines to read (optional)
-
-EXAMPLE:
-{
-  "path": "memory/2024-01-15.md",
-  "from": 42,
-  "lines": 20
-}
-"""
+import numpy as np
 
 
-def get_search_tool_definition() -> Tool:
-    """Get MCP tool definition for memory_search."""
-    return Tool(
-        name="memory_search",
-        description=SEARCH_DESCRIPTION,
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query",
-                },
-                "maxResults": {
-                    "type": "integer",
-                    "description": "Maximum results to return",
-                },
-                "minScore": {
-                    "type": "number",
-                    "description": "Minimum similarity score (0.0-1.0)",
-                },
-            },
-            "required": ["query"],
-        },
+# Constants
+DATA_DIR = Path.home() / ".local" / "share" / "lobster-powers" / "memory"
+DB_PATH = DATA_DIR / "index.db"
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMS = 1536
+CHUNK_SIZE = 500  # chars
+CHUNK_OVERLAP = 50
+
+
+def get_db() -> sqlite3.Connection:
+    """Get database connection, creating schema if needed."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    # Create schema
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS files (
+            path TEXT PRIMARY KEY,
+            hash TEXT NOT NULL,
+            mtime INTEGER NOT NULL,
+            indexed_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL,
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            embedding BLOB NOT NULL,
+            FOREIGN KEY (path) REFERENCES files(path) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
+
+        -- FTS5 for keyword search
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+            content,
+            content='chunks',
+            content_rowid='id'
+        );
+
+        -- Triggers to keep FTS in sync
+        CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+            INSERT INTO chunks_fts(rowid, content) VALUES (new.id, new.content);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+            INSERT INTO chunks_fts(chunks_fts, rowid, content) VALUES('delete', old.id, old.content);
+        END;
+    """)
+
+    return conn
+
+
+def file_hash(path: Path) -> str:
+    """Compute SHA256 hash of file contents."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+
+
+def split_into_chunks(text: str, chunk_size: int = CHUNK_SIZE) -> list[tuple[int, int, str]]:
+    """
+    Split text into chunks, respecting paragraph boundaries.
+    Returns list of (start_line, end_line, content).
+    """
+    lines = text.split("\n")
+    chunks = []
+    current_chunk = []
+    current_start = 1
+    current_len = 0
+
+    for i, line in enumerate(lines, 1):
+        line_len = len(line) + 1  # +1 for newline
+
+        # If adding this line exceeds chunk size and we have content, save chunk
+        if current_len + line_len > chunk_size and current_chunk:
+            content = "\n".join(current_chunk)
+            chunks.append((current_start, i - 1, content))
+            # Overlap: keep last few lines
+            overlap_lines = []
+            overlap_len = 0
+            for prev_line in reversed(current_chunk):
+                if overlap_len + len(prev_line) > CHUNK_OVERLAP:
+                    break
+                overlap_lines.insert(0, prev_line)
+                overlap_len += len(prev_line) + 1
+            current_chunk = overlap_lines
+            current_start = i - len(overlap_lines)
+            current_len = overlap_len
+
+        current_chunk.append(line)
+        current_len += line_len
+
+    # Last chunk
+    if current_chunk:
+        content = "\n".join(current_chunk)
+        chunks.append((current_start, len(lines), content))
+
+    return chunks
+
+
+def get_embeddings(texts: list[str], api_key: str) -> list[list[float]]:
+    """Get embeddings from OpenAI API."""
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key)
+
+    # Batch in groups of 100
+    all_embeddings = []
+    for i in range(0, len(texts), 100):
+        batch = texts[i:i + 100]
+        response = client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=batch,
+        )
+        all_embeddings.extend([e.embedding for e in response.data])
+
+    return all_embeddings
+
+
+def embedding_to_blob(embedding: list[float]) -> bytes:
+    """Convert embedding list to binary blob."""
+    return struct.pack(f"{len(embedding)}f", *embedding)
+
+
+def blob_to_embedding(blob: bytes) -> np.ndarray:
+    """Convert binary blob to numpy array."""
+    count = len(blob) // 4  # float32 = 4 bytes
+    return np.array(struct.unpack(f"{count}f", blob), dtype=np.float32)
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute cosine similarity between two vectors."""
+    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+
+# Commands
+
+def cmd_index(args) -> None:
+    """Index files for searching."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("Error: OPENAI_API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+
+    path = Path(args.path).expanduser().resolve()
+    if not path.exists():
+        print(f"Error: Path not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Collect files
+    if path.is_file():
+        files = [path]
+    else:
+        files = list(path.glob("**/*.md")) + list(path.glob("**/*.txt"))
+
+    if not files:
+        print(f"No .md or .txt files found in {path}")
+        return
+
+    conn = get_db()
+    indexed = 0
+    skipped = 0
+
+    for file_path in files:
+        rel_path = str(file_path)
+        current_hash = file_hash(file_path)
+
+        # Check if already indexed with same hash
+        existing = conn.execute(
+            "SELECT hash FROM files WHERE path = ?", (rel_path,)
+        ).fetchone()
+
+        if existing and existing["hash"] == current_hash and not args.force:
+            skipped += 1
+            continue
+
+        # Read and chunk
+        try:
+            text = file_path.read_text()
+        except Exception as e:
+            print(f"Warning: Could not read {file_path}: {e}", file=sys.stderr)
+            continue
+
+        chunks = split_into_chunks(text)
+        if not chunks:
+            continue
+
+        # Get embeddings
+        print(f"Indexing {file_path.name} ({len(chunks)} chunks)...")
+        embeddings = get_embeddings([c[2] for c in chunks], api_key)
+
+        # Delete old data
+        conn.execute("DELETE FROM chunks WHERE path = ?", (rel_path,))
+        conn.execute("DELETE FROM files WHERE path = ?", (rel_path,))
+
+        # Insert new data
+        from datetime import datetime
+        conn.execute(
+            "INSERT INTO files (path, hash, mtime, indexed_at) VALUES (?, ?, ?, ?)",
+            (rel_path, current_hash, int(file_path.stat().st_mtime), datetime.now().isoformat())
+        )
+
+        for (start, end, content), embedding in zip(chunks, embeddings):
+            conn.execute(
+                "INSERT INTO chunks (path, start_line, end_line, content, embedding) VALUES (?, ?, ?, ?, ?)",
+                (rel_path, start, end, content, embedding_to_blob(embedding))
+            )
+
+        conn.commit()
+        indexed += 1
+
+    print(f"\nIndexed: {indexed} files, Skipped: {skipped} files (unchanged)")
+
+
+def cmd_search(args) -> None:
+    """Search indexed files."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("Error: OPENAI_API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+
+    conn = get_db()
+
+    # Check if we have any data
+    count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    if count == 0:
+        print("No files indexed. Run: lp-memory index <path>")
+        return
+
+    # Get query embedding
+    query_embedding = np.array(get_embeddings([args.query], api_key)[0], dtype=np.float32)
+
+    # Vector search
+    vector_results = []
+    for row in conn.execute("SELECT id, path, start_line, end_line, content, embedding FROM chunks"):
+        embedding = blob_to_embedding(row["embedding"])
+        score = cosine_similarity(query_embedding, embedding)
+        vector_results.append({
+            "id": row["id"],
+            "path": row["path"],
+            "start_line": row["start_line"],
+            "end_line": row["end_line"],
+            "content": row["content"],
+            "vector_score": score,
+        })
+
+    # FTS search
+    fts_query = " OR ".join(f'"{word}"' for word in args.query.split() if len(word) > 2)
+    fts_scores = {}
+    if fts_query:
+        try:
+            for row in conn.execute(
+                "SELECT rowid, bm25(chunks_fts) as score FROM chunks_fts WHERE chunks_fts MATCH ?",
+                (fts_query,)
+            ):
+                fts_scores[row["rowid"]] = -row["score"]  # BM25 returns negative
+        except sqlite3.OperationalError:
+            pass  # FTS query failed, ignore
+
+    # Normalize and combine scores
+    if vector_results:
+        max_v = max(r["vector_score"] for r in vector_results)
+        min_v = min(r["vector_score"] for r in vector_results)
+        v_range = max_v - min_v if max_v != min_v else 1
+
+        for r in vector_results:
+            r["vector_norm"] = (r["vector_score"] - min_v) / v_range
+
+    if fts_scores:
+        max_f = max(fts_scores.values())
+        min_f = min(fts_scores.values())
+        f_range = max_f - min_f if max_f != min_f else 1
+        fts_norm = {k: (v - min_f) / f_range for k, v in fts_scores.items()}
+    else:
+        fts_norm = {}
+
+    # Combine with weights
+    vector_weight = args.vector_weight
+    text_weight = 1 - vector_weight
+
+    for r in vector_results:
+        fts_score = fts_norm.get(r["id"], 0)
+        r["combined_score"] = r["vector_norm"] * vector_weight + fts_score * text_weight
+
+    # Sort and return top results
+    vector_results.sort(key=lambda x: x["combined_score"], reverse=True)
+    top_results = vector_results[:args.top]
+
+    if not top_results:
+        print("No results found.")
+        return
+
+    print(f"Found {len(top_results)} matches:\n")
+    for r in top_results:
+        score = r["combined_score"]
+        path = Path(r["path"]).name
+        lines = f"{r['start_line']}-{r['end_line']}"
+        print(f"[{score:.2f}] {path}:{lines}")
+        # Show first 200 chars of content
+        preview = r["content"][:200].replace("\n", " ")
+        if len(r["content"]) > 200:
+            preview += "..."
+        print(f"  {preview}\n")
+
+
+def cmd_read(args) -> None:
+    """Read specific lines from a file."""
+    path = Path(args.path).expanduser().resolve()
+    if not path.exists():
+        print(f"Error: File not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    lines = path.read_text().split("\n")
+
+    start = args.from_line - 1 if args.from_line else 0
+    end = start + args.lines if args.lines else len(lines)
+
+    for i, line in enumerate(lines[start:end], start + 1):
+        print(f"{i:4d} | {line}")
+
+
+def cmd_status(args) -> None:
+    """Show index statistics."""
+    if not DB_PATH.exists():
+        print("No index found. Run: lp-memory index <path>")
+        return
+
+    conn = get_db()
+
+    files = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+    chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+
+    print(f"Indexed files: {files}")
+    print(f"Total chunks: {chunks}")
+    print(f"Database: {DB_PATH}")
+    print(f"Model: {EMBEDDING_MODEL}")
+
+    if files > 0:
+        print("\nRecent files:")
+        for row in conn.execute(
+            "SELECT path, indexed_at FROM files ORDER BY indexed_at DESC LIMIT 5"
+        ):
+            print(f"  {Path(row['path']).name} ({row['indexed_at'][:10]})")
+
+
+def cmd_forget(args) -> None:
+    """Remove files from index."""
+    conn = get_db()
+    path = Path(args.path).expanduser().resolve()
+
+    if path.is_file():
+        conn.execute("DELETE FROM chunks WHERE path = ?", (str(path),))
+        conn.execute("DELETE FROM files WHERE path = ?", (str(path),))
+    else:
+        conn.execute("DELETE FROM chunks WHERE path LIKE ?", (f"{path}%",))
+        conn.execute("DELETE FROM files WHERE path LIKE ?", (f"{path}%",))
+
+    conn.commit()
+    print(f"Removed {path} from index")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Semantic search over notes and files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
     )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # index
+    index_parser = subparsers.add_parser("index", help="Index files")
+    index_parser.add_argument("path", help="File or directory to index")
+    index_parser.add_argument("--force", "-f", action="store_true", help="Re-index even if unchanged")
+    index_parser.set_defaults(func=cmd_index)
+
+    # search
+    search_parser = subparsers.add_parser("search", help="Search indexed files")
+    search_parser.add_argument("query", help="Search query")
+    search_parser.add_argument("--top", "-t", type=int, default=5, help="Number of results")
+    search_parser.add_argument("--vector-weight", type=float, default=0.7, help="Vector vs FTS weight (0-1)")
+    search_parser.set_defaults(func=cmd_search)
+
+    # read
+    read_parser = subparsers.add_parser("read", help="Read file lines")
+    read_parser.add_argument("path", help="File path")
+    read_parser.add_argument("--from", dest="from_line", type=int, help="Starting line")
+    read_parser.add_argument("--lines", type=int, default=20, help="Number of lines")
+    read_parser.set_defaults(func=cmd_read)
+
+    # status
+    status_parser = subparsers.add_parser("status", help="Show index status")
+    status_parser.set_defaults(func=cmd_status)
+
+    # forget
+    forget_parser = subparsers.add_parser("forget", help="Remove from index")
+    forget_parser.add_argument("path", help="File or directory to forget")
+    forget_parser.set_defaults(func=cmd_forget)
+
+    args = parser.parse_args()
+    args.func(args)
 
 
-def get_get_tool_definition() -> Tool:
-    """Get MCP tool definition for memory_get."""
-    return Tool(
-        name="memory_get",
-        description=GET_DESCRIPTION,
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative path to file",
-                },
-                "from": {
-                    "type": "integer",
-                    "description": "Starting line number",
-                },
-                "lines": {
-                    "type": "integer",
-                    "description": "Number of lines to read",
-                },
-            },
-            "required": ["path"],
-        },
-    )
-
-
-async def execute_search(gateway: OpenClawGateway, params: dict[str, Any]) -> dict[str, Any]:
-    """Execute memory_search tool via OpenClaw Gateway."""
-    query = params.get("query")
-    if not query:
-        return {"error": "query required"}
-
-    return await gateway.call_tool(
-        "memory.search",
-        {
-            "query": query,
-            "maxResults": params.get("maxResults"),
-            "minScore": params.get("minScore"),
-        },
-    )
-
-
-async def execute_get(gateway: OpenClawGateway, params: dict[str, Any]) -> dict[str, Any]:
-    """Execute memory_get tool via OpenClaw Gateway."""
-    path = params.get("path")
-    if not path:
-        return {"error": "path required"}
-
-    return await gateway.call_tool(
-        "memory.get",
-        {
-            "path": path,
-            "from": params.get("from"),
-            "lines": params.get("lines"),
-        },
-    )
+if __name__ == "__main__":
+    main()
