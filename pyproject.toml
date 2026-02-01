@@ -28,7 +28,8 @@ memory = ["numpy", "sentence-transformers"]
 browser = ["playwright"]
 tts = ["edge-tts", "openai", "httpx"]
 web = ["httpx", "readability-lxml", "lxml", "html2text"]
-all = ["lobster-powers[cron,memory,browser,tts,web]"]
+image = ["openai", "anthropic", "httpx"]
+all = ["lobster-powers[cron,memory,browser,tts,web,image]"]
 
 [project.scripts]
 lp-cron = "lobster_powers.tools.cron:main"
@@ -38,6 +39,7 @@ lp-notify = "lobster_powers.tools.notify:main"
 lp-tts = "lobster_powers.tools.tts:main"
 lp-web-fetch = "lobster_powers.tools.web_fetch:main"
 lp-web-search = "lobster_powers.tools.web_search:main"
+lp-image = "lobster_powers.tools.image:main"
 
 [project.urls]
 Homepage = "https://github.com/superbereza/lobster-powers"
