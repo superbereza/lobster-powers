@@ -9,8 +9,10 @@ Examples:
 """
 
 import argparse
+import ipaddress
 import json
 import os
+import socket
 import sys
 from urllib.parse import urlparse
 
@@ -27,6 +29,26 @@ DEFAULT_USER_AGENT = (
 )
 
 
+def is_private_url(url: str) -> bool:
+    """Check if URL points to private/internal network."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        return True
+
+    # Check common internal hostnames
+    if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        return True
+
+    try:
+        # Resolve hostname and check IP
+        ip = socket.gethostbyname(hostname)
+        ip_obj = ipaddress.ip_address(ip)
+        return ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
+    except socket.gaierror:
+        return False  # Can't resolve, let httpx handle it
+
+
 def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> httpx.Response:
     """Fetch URL with proper headers and redirect handling."""
     headers = {
@@ -34,7 +56,9 @@ def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> httpx.Response:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     }
-    return httpx.get(url, headers=headers, follow_redirects=True, timeout=timeout)
+    response = httpx.get(url, headers=headers, follow_redirects=True, timeout=timeout)
+    response.raise_for_status()
+    return response
 
 
 def extract_readable(html: str, url: str) -> dict:
@@ -95,6 +119,10 @@ def web_fetch(
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError("URL must be http or https")
+
+    # SSRF protection: block private/internal networks
+    if is_private_url(url):
+        raise ValueError("URL points to private/internal network")
 
     firecrawl_key = os.environ.get("FIRECRAWL_API_KEY")
 
