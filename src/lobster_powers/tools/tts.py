@@ -226,32 +226,34 @@ def cmd_voices(args) -> None:
 
 
 def main():
+    # Check for "voices" subcommand first (before argparse)
+    if len(sys.argv) > 1 and sys.argv[1] == "voices":
+        parser = argparse.ArgumentParser(description="List available TTS voices")
+        parser.add_argument("--provider", "-p", choices=list(PROVIDERS.keys()), help="TTS provider")
+        # Skip "voices" arg
+        args = parser.parse_args(sys.argv[2:])
+        cmd_voices(args)
+        return
+
+    # Main parser for speak command
     parser = argparse.ArgumentParser(
         description="Text-to-speech with multiple providers",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    subparsers = parser.add_subparsers(dest="command")
-
-    # Default command (speak) - handle positional text without subcommand
     parser.add_argument("text", nargs="?", help="Text to speak")
     parser.add_argument("--provider", "-p", choices=list(PROVIDERS.keys()), help="TTS provider")
     parser.add_argument("--voice", "-v", default="en-US-AriaNeural", help="Voice name/ID")
     parser.add_argument("--output", "-o", help="Output file path")
 
-    # voices subcommand
-    voices_parser = subparsers.add_parser("voices", help="List available voices")
-    voices_parser.add_argument("--provider", "-p", choices=list(PROVIDERS.keys()), help="TTS provider")
-    voices_parser.set_defaults(func=cmd_voices)
-
     args = parser.parse_args()
 
-    if args.command == "voices":
-        args.func(args)
-    elif args.text:
+    if args.text:
         cmd_speak(args)
     else:
         parser.print_help()
+        print("\nSubcommands:")
+        print("  voices    List available voices")
         sys.exit(1)
 
 
