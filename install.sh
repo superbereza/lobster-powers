@@ -94,6 +94,12 @@ install_cli() {
     echo "  Installing Playwright browsers..."
     "$VENV_DIR/bin/playwright" install chromium 2>/dev/null || true
 
+    # Check if system deps are missing
+    if ! "$VENV_DIR/bin/python" -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(); b.close(); p.stop()" 2>/dev/null; then
+        echo -e "  ${YELLOW}!${NC} Playwright needs system deps. Run:"
+        echo -e "    sudo $VENV_DIR/bin/playwright install-deps chromium"
+    fi
+
     # Create ~/.local/bin if needed
     mkdir -p "$LOCAL_BIN"
 
