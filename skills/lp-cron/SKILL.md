@@ -1,5 +1,5 @@
 ---
-name: cron
+name: lp-cron
 description: Schedule reminders and recurring tasks using lp-cron CLI
 ---
 

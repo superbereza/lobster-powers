@@ -37,16 +37,15 @@ for cmd in lp-notify lp-tts lp-memory lp-browser lp-cron lp-image lp-web-fetch l
     fi
 done
 
-# Symlink all skills to parent .claude/skills/ for auto-discovery
+# Symlink all skills to ~/.claude/skills/ for auto-discovery
 echo "Creating skill symlinks in $SKILLS_ROOT..."
-for skill in "$SCRIPT_DIR/skills/"*.md; do
-    if [ -f "$skill" ]; then
-        # browser.md -> lp-browser/SKILL.md
-        name=$(basename "$skill" .md)
-        skill_dir="$SKILLS_ROOT/lp-$name"
-        mkdir -p "$skill_dir"
-        ln -sf "$skill" "$skill_dir/SKILL.md"
-        echo "  ✓ lp-$name"
+for skill_dir in "$SCRIPT_DIR/skills/"lp-*/; do
+    if [ -d "$skill_dir" ]; then
+        name=$(basename "$skill_dir")
+        target_dir="$SKILLS_ROOT/$name"
+        mkdir -p "$target_dir"
+        ln -sf "$skill_dir/SKILL.md" "$target_dir/SKILL.md"
+        echo "  ✓ $name"
     fi
 done
 

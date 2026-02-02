@@ -1,0 +1,18 @@
+{
+  "name": "lobster-powers",
+  "owner": {
+    "name": "superbereza"
+  },
+  "metadata": {
+    "description": "CLI superpowers for AI agents",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "lobster-powers",
+      "source": "./",
+      "description": "CLI superpowers for AI agents: memory, browser automation, TTS, notifications, scheduling, and more",
+      "version": "1.0.0"
+    }
+  ]
+}

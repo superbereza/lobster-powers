@@ -1,0 +1,12 @@
+{
+  "name": "lobster-powers",
+  "description": "CLI superpowers for AI agents: memory, browser automation, TTS, notifications, scheduling, and more",
+  "version": "1.0.0",
+  "author": {
+    "name": "superbereza"
+  },
+  "homepage": "https://github.com/superbereza/lobster-powers",
+  "repository": "https://github.com/superbereza/lobster-powers",
+  "license": "MIT",
+  "keywords": ["cli", "memory", "browser", "tts", "notifications", "scheduling", "ai-tools"]
+}
