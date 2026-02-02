@@ -1,4 +1,4 @@
-# 🦞 lobster-powers
+# 🦞 lobster-powers — OpenClaw native tools for any agent
 
 **Snap snap!** Give your AI agent some serious claws.
 
