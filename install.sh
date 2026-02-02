@@ -7,8 +7,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 LOCAL_BIN="$HOME/.local/bin"
-# Skills go to parent dir so all sibling projects auto-discover them
-SKILLS_ROOT="$(dirname "$SCRIPT_DIR")/.claude/skills"
+# Skills go to ~/.claude/skills/ for global auto-discovery
+SKILLS_ROOT="$HOME/.claude/skills"
 
 echo "🦞 Installing Lobster Powers..."
 

@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 LOCAL_BIN="$HOME/.local/bin"
-SKILLS_ROOT="$(dirname "$SCRIPT_DIR")/.claude/skills"
+SKILLS_ROOT="$HOME/.claude/skills"
 
 echo "🦞 Uninstalling Lobster Powers..."
 
