@@ -432,4 +432,17 @@ echo "🦞 Lobster Powers installed!"
 echo ""
 echo "CLI commands: lp-notify, lp-tts, lp-memory, lp-browser, lp-cron, lp-image, lp-web-fetch, lp-web-search"
 echo ""
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo -e "${YELLOW}⚠️  ~/.local/bin is not in your PATH${NC}"
+    echo ""
+    echo "Add this to your ~/.bashrc or ~/.zshrc:"
+    echo ""
+    echo '  export PATH="$HOME/.local/bin:$PATH"'
+    echo ""
+    echo "Then run: source ~/.bashrc (or restart terminal)"
+    echo ""
+fi
+
 echo "To uninstall: ./uninstall.sh"
