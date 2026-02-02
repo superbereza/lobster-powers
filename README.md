@@ -32,15 +32,29 @@ Same capabilities. Standalone CLI tools. Works everywhere.
 
 ## 📦 Installation
 
-```bash
-# Get everything
-pip install lobster-powers[all]
+### 🦀 Claude Code (recommended)
 
-# Or pick your powers
-pip install lobster-powers[memory]    # 🧠 Remember stuff
-pip install lobster-powers[browser]   # 🌐 Web automation
-pip install lobster-powers[tts]       # 🗣️ Talk back
+```bash
+# Add the lobster marketplace
+/plugin marketplace add superbereza/lobster-powers
+
+# Unleash the powers
+/plugin install lobster-powers@lobster-powers
 ```
+
+Done. Your Claude now has claws.
+
+### 🔧 Manual install (any agent)
+
+```bash
+git clone https://github.com/superbereza/lobster-powers
+cd lobster-powers
+./install.sh
+```
+
+This installs:
+- CLI tools → `~/.local/bin/lp-*`
+- Skills → `~/.claude/skills/`
 
 ## ⚙️ Requirements
 
@@ -88,12 +102,18 @@ lp-browser screenshot
 
 ## 🤖 For AI Agents
 
-Each tool comes with a skill file (`skills/*.md`) that teaches your AI how to use it.
+Each power comes with a skill that teaches your AI when and how to use it.
 
-Just ask naturally:
+**Claude Code / OpenCode** — skills load automatically via plugin system
+
+**Other agents** — `./install.sh` symlinks skills to `~/.claude/skills/`
+
+Then just ask naturally:
 - *"Remind me to deploy at 3pm"*
 - *"What did we decide about the database schema?"*
 - *"Read that HN article and summarize it"*
+
+Your agent figures out which claw to use. 🦞
 
 ## 🏗️ Architecture
 
