@@ -1,5 +1,8 @@
 # 🦞 lobster-powers — OpenClaw tools for any agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
 **Snap snap!** Give your AI agent some serious claws.
 
 > *"Why should OpenClaw have all the fun?"*
@@ -37,6 +40,34 @@ pip install lobster-powers[all]
 pip install lobster-powers[memory]    # 🧠 Remember stuff
 pip install lobster-powers[browser]   # 🌐 Web automation
 pip install lobster-powers[tts]       # 🗣️ Talk back
+```
+
+## ⚙️ Requirements
+
+- **Python**: 3.10+
+- **OS**: Linux, macOS, Windows
+- **Optional**: Playwright browsers for `lp-browser` (auto-installed)
+
+## 🔑 API Keys
+
+Some powers need API keys. Set them as environment variables:
+
+| Power | Required Key | Free Tier? |
+|-------|-------------|------------|
+| 🧠 memory | `OPENAI_API_KEY` | No (~$0.01/100 files) |
+| 🖼️ image | `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` | No |
+| 🗣️ tts | None (Edge TTS) | ✅ Yes |
+| 🗣️ tts | `OPENAI_API_KEY` or `ELEVENLABS_API_KEY` | No |
+| 🔍 web-search | `BRAVE_API_KEY` or `PERPLEXITY_API_KEY` | ✅ Brave free tier |
+| 📄 web-fetch | None | ✅ Yes |
+| 🕐 cron | None | ✅ Yes |
+| 🔔 notify | None | ✅ Yes |
+| 🌐 browser | None | ✅ Yes |
+
+```bash
+# Example: add to your shell profile
+export OPENAI_API_KEY="sk-..."
+export BRAVE_API_KEY="BSA..."
 ```
 
 ## 🚀 Quick Start
