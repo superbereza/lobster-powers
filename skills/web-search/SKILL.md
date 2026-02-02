@@ -1,5 +1,5 @@
 ---
-name: lp-web-search
+name: web-search
 description: Web search using lp-web-search with Brave or Perplexity
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: lp-memory
+name: memory
 description: Semantic search over notes and files using lp-memory CLI
 ---
 

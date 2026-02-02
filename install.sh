@@ -39,8 +39,8 @@ done
 
 # Symlink all skills to ~/.claude/skills/ for auto-discovery
 echo "Creating skill symlinks in $SKILLS_ROOT..."
-for skill_dir in "$SCRIPT_DIR/skills/"lp-*/; do
-    if [ -d "$skill_dir" ]; then
+for skill_dir in "$SCRIPT_DIR/skills/"*/; do
+    if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
         name=$(basename "$skill_dir")
         target_dir="$SKILLS_ROOT/$name"
         mkdir -p "$target_dir"

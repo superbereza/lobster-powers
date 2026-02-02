@@ -1,5 +1,5 @@
 ---
-name: lp-notify
+name: notify
 description: Send desktop notifications using lp-notify CLI
 ---
 

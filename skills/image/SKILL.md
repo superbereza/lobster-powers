@@ -1,5 +1,5 @@
 ---
-name: lp-image
+name: image
 description: Analyze images using vision models via lp-image
 ---
 

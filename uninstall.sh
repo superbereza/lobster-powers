@@ -23,10 +23,10 @@ done
 # Remove skill directories
 echo "Removing skills from $SKILLS_ROOT..."
 for skill in browser cron image memory notify tts web-fetch web-search; do
-    skill_dir="$SKILLS_ROOT/lp-$skill"
+    skill_dir="$SKILLS_ROOT/$skill"
     if [ -d "$skill_dir" ]; then
         rm -rf "$skill_dir"
-        echo "  ✓ Removed lp-$skill"
+        echo "  ✓ Removed $skill"
     fi
 done
 

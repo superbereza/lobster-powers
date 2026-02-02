@@ -1,5 +1,5 @@
 ---
-name: lp-web-fetch
+name: web-fetch
 description: Fetch and extract readable content from URLs using lp-web-fetch
 ---
 

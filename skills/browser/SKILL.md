@@ -1,5 +1,5 @@
 ---
-name: lp-browser
+name: browser
 description: Browser automation using lp-browser CLI with Playwright
 ---
 

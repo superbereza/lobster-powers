@@ -1,5 +1,5 @@
 ---
-name: lp-tts
+name: tts
 description: Text-to-speech using lp-tts CLI with Edge/OpenAI/ElevenLabs
 ---
 
