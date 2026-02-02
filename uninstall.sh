@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 LOCAL_BIN="$HOME/.local/bin"
-CLAUDE_COMMANDS="$HOME/.claude/commands"
+SKILLS_ROOT="$(dirname "$SCRIPT_DIR")/.claude/skills"
 
 echo "🦞 Uninstalling Lobster Powers..."
 
@@ -20,12 +20,13 @@ for cmd in lp-notify lp-tts lp-memory lp-browser lp-cron lp-image lp-web-fetch l
     fi
 done
 
-# Remove skill symlinks
-echo "Removing skill symlinks..."
+# Remove skill directories
+echo "Removing skills from $SKILLS_ROOT..."
 for skill in browser cron image memory notify tts web-fetch web-search; do
-    if [ -L "$CLAUDE_COMMANDS/$skill.md" ]; then
-        rm "$CLAUDE_COMMANDS/$skill.md"
-        echo "  ✓ Removed $skill.md"
+    skill_dir="$SKILLS_ROOT/lp-$skill"
+    if [ -d "$skill_dir" ]; then
+        rm -rf "$skill_dir"
+        echo "  ✓ Removed lp-$skill"
     fi
 done
 

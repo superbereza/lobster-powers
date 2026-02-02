@@ -7,7 +7,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 LOCAL_BIN="$HOME/.local/bin"
-CLAUDE_COMMANDS="$HOME/.claude/commands"
+# Skills go to parent dir so all sibling projects auto-discover them
+SKILLS_ROOT="$(dirname "$SCRIPT_DIR")/.claude/skills"
 
 echo "🦞 Installing Lobster Powers..."
 
@@ -36,16 +37,16 @@ for cmd in lp-notify lp-tts lp-memory lp-browser lp-cron lp-image lp-web-fetch l
     fi
 done
 
-# Create ~/.claude/commands if needed
-mkdir -p "$CLAUDE_COMMANDS"
-
-# Symlink all skills
-echo "Creating skill symlinks in $CLAUDE_COMMANDS..."
+# Symlink all skills to parent .claude/skills/ for auto-discovery
+echo "Creating skill symlinks in $SKILLS_ROOT..."
 for skill in "$SCRIPT_DIR/skills/"*.md; do
     if [ -f "$skill" ]; then
-        name=$(basename "$skill")
-        ln -sf "$skill" "$CLAUDE_COMMANDS/$name"
-        echo "  ✓ $name"
+        # browser.md -> lp-browser/SKILL.md
+        name=$(basename "$skill" .md)
+        skill_dir="$SKILLS_ROOT/lp-$name"
+        mkdir -p "$skill_dir"
+        ln -sf "$skill" "$skill_dir/SKILL.md"
+        echo "  ✓ lp-$name"
     fi
 done
 
@@ -56,6 +57,7 @@ echo "Commands available:"
 echo "  lp-notify, lp-tts, lp-memory, lp-browser,"
 echo "  lp-cron, lp-image, lp-web-fetch, lp-web-search"
 echo ""
-echo "Skills available in ~/.claude/commands/"
+echo "Skills installed to: $SKILLS_ROOT"
+echo "(Auto-discovered by Claude in all sibling projects)"
 echo ""
 echo "To uninstall: ./uninstall.sh"
