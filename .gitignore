@@ -40,3 +40,6 @@ htmlcov/
 .DS_Store
 *.log
 .venv/
+
+# Secrets
+.env

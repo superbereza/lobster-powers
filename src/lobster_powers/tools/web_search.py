@@ -15,6 +15,9 @@ import sys
 
 import httpx
 
+from lobster_powers.env import load_env
+load_env()
+
 
 DEFAULT_COUNT = 5
 MAX_COUNT = 10

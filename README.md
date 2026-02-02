@@ -64,7 +64,12 @@ This installs:
 
 ## 🔑 API Keys
 
-Some powers need API keys. Set them as environment variables:
+Some powers need API keys. Copy `.env.example` to `.env` and fill in your keys:
+
+```bash
+cp .env.example .env
+# Edit .env with your keys
+```
 
 | Power | Required Key | Free Tier? |
 |-------|-------------|------------|
@@ -77,12 +82,6 @@ Some powers need API keys. Set them as environment variables:
 | 🕐 cron | None | ✅ Yes |
 | 🔔 notify | None | ✅ Yes |
 | 🌐 browser | None | ✅ Yes |
-
-```bash
-# Example: add to your shell profile
-export OPENAI_API_KEY="sk-..."
-export BRAVE_API_KEY="BSA..."
-```
 
 ## 🚀 Quick Start
 

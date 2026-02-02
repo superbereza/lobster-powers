@@ -17,6 +17,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+from lobster_powers.env import load_env
+load_env()
+
 # Provider implementations
 
 async def tts_edge(text: str, voice: str = "en-US-AriaNeural", output: Path | None = None) -> Path:

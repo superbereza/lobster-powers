@@ -19,6 +19,9 @@ from urllib.parse import urlparse
 
 import httpx
 
+from lobster_powers.env import load_env
+load_env()
+
 
 DEFAULT_PROMPT = "Describe this image in detail."
 DEFAULT_MAX_TOKENS = 1024

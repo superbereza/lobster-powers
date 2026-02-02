@@ -21,6 +21,9 @@ from pathlib import Path
 
 import numpy as np
 
+from lobster_powers.env import load_env
+load_env()
+
 
 # Constants
 DATA_DIR = Path.home() / ".local" / "share" / "lobster-powers" / "memory"
