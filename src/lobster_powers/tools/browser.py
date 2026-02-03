@@ -286,8 +286,11 @@ def cmd_start(args) -> None:
         print("Browser daemon already running")
         return
 
+    # Auto-detect headless if no display
+    headless = args.headless or not os.environ.get("DISPLAY")
+
     if args.foreground:
-        asyncio.run(run_daemon(headless=args.headless))
+        asyncio.run(run_daemon(headless=headless))
     else:
         # Fork to background
         pid = os.fork()
@@ -297,7 +300,7 @@ def cmd_start(args) -> None:
         else:
             # Child process
             os.setsid()
-            asyncio.run(run_daemon(headless=args.headless))
+            asyncio.run(run_daemon(headless=headless))
 
 
 def cmd_stop(args) -> None:
