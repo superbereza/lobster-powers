@@ -4,16 +4,16 @@ Python port of OpenClaw native tools as standalone CLIs.
 
 ## Quick Reference
 
-| Tool | CLI | Status | OpenClaw Source |
-|------|-----|--------|-----------------|
-| Cron | `lp-cron` | Done | cron-tool.ts |
-| Memory | `lp-memory` | TODO | memory-tool.ts |
-| TTS | `lp-tts` | TODO | tts.ts |
-| Image | `lp-image` | TODO | image-tool.ts |
-| Web Fetch | `lp-web-fetch` | TODO | web-fetch.ts |
-| Web Search | `lp-web-search` | TODO | web-search.ts |
-| Browser | `lp-browser` | TODO | browser-tool.ts |
-| Notify | `lp-notify` | TODO | (system) |
+| Tool | CLI | Status | Notes |
+|------|-----|--------|-------|
+| Cron | `lp-cron` | ✅ Done | Scheduling with cron expressions |
+| Memory | `lp-memory` | ✅ Done | Requires OPENAI_API_KEY for embeddings |
+| TTS | `lp-tts` | ✅ Done | Edge (free), OpenAI, ElevenLabs providers |
+| Image | `lp-image` | ✅ Done | Requires OPENAI_API_KEY or ANTHROPIC_API_KEY |
+| Web Fetch | `lp-web-fetch` | ✅ Done | Readability extraction, optional Firecrawl |
+| Web Search | `lp-web-search` | ✅ Done | Brave or Perplexity providers |
+| Browser | `lp-browser` | ✅ Done | Playwright, auto-headless detection |
+| Notify | `lp-notify` | ✅ Done | Desktop notifications (requires display) |
 
 ## Architecture
 
@@ -87,8 +87,8 @@ src/lobster_powers/
 ├── __init__.py
 ├── config.py                # Config management
 └── tools/
-    ├── cron.py              # lp-cron (DONE)
-    ├── memory.py            # lp-memory (TODO: rewrite)
+    ├── cron.py              # lp-cron
+    ├── memory.py            # lp-memory
     ├── tts.py               # lp-tts
     ├── image.py             # lp-image
     ├── web_fetch.py         # lp-web-fetch
@@ -96,10 +96,15 @@ src/lobster_powers/
     ├── browser.py           # lp-browser
     └── notify.py            # lp-notify
 
-skills/                      # Skill files for AI agents
-├── cron.md
-├── memory.md
-└── ...
+skills/                      # Skill files for Claude Code plugin
+├── cron/SKILL.md
+├── memory/SKILL.md
+├── tts/SKILL.md
+├── image/SKILL.md
+├── web-fetch/SKILL.md
+├── web-search/SKILL.md
+├── browser/SKILL.md
+└── notify/SKILL.md
 ```
 
 ## See Also
