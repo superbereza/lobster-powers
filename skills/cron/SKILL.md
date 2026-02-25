@@ -11,80 +11,67 @@ Schedule a reminder that will be delivered back to YOU (the agent), not the user
 
 1. You figure out HOW to receive the reminder (you know your environment)
 2. You pass that as `--deliver` command
-3. When time comes, your command executes with `$MSG` substituted
+3. System `at` (one-time) or `crontab` (recurring) executes your command
 4. You receive the reminder as input and decide what to do
 
-## Quick Start
+## Usage
 
 ```bash
-# 1. Figure out your delivery method (see below)
-# 2. Schedule reminder
-lp-cron add "Check test results" --in "1h" --deliver "YOUR_DELIVERY_COMMAND"
+# One-time (uses system `at`)
+lp-cron add "Check test results" --in "1h" --deliver "YOUR_COMMAND"
 
-# 3. Make sure daemon is running
-lp-cron daemon &
+# Recurring (uses system crontab)
+lp-cron add "Daily standup" --cron "0 10 * * *" --deliver "YOUR_COMMAND"
 ```
 
 ## Your Job: Figure Out Delivery
 
-You need to provide a command that injects `$MSG` into YOUR input/context.
-
-**Think about your environment:**
+Provide a command that injects `$MSG` into YOUR input/context.
 
 ### If you're in tmux (most common)
+
 ```bash
 # Find your pane
-tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'
-# Example output: claude-codogram-myproject:0.0
+PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
 
-# Use it
+# Use this delivery command (sleep 1 is important!)
 lp-cron add "Check tests" --in "1h" \
-  --deliver "tmux send-keys -t claude-codogram-myproject:0.0 '\$MSG' Enter"
+  --deliver "tmux send-keys -t $PANE '\$MSG' && sleep 1 && tmux send-keys -t $PANE Enter"
 ```
 
-### If you have a Claude session file
-```bash
-lp-cron add "Review PR" --in "2h" \
-  --deliver "claude --resume SESSION_ID -p '\$MSG'"
-```
+**Important:** The `sleep 1` before Enter is critical for reliable delivery.
 
 ### Other environments
+
 Figure out how to inject text into your stdin/context and use that command.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `lp-cron add TEXT --in TIME --deliver CMD` | Schedule reminder |
+| `lp-cron add TEXT --in TIME --deliver CMD` | One-time reminder |
+| `lp-cron add TEXT --cron EXPR --deliver CMD` | Recurring reminder |
 | `lp-cron list` | Show scheduled jobs |
 | `lp-cron remove ID` | Cancel a job |
 | `lp-cron run ID` | Trigger immediately (test) |
-| `lp-cron tick` | Check and trigger due jobs (one pass) |
-| `lp-cron daemon` | Run background checker |
-| `lp-cron stop` | Stop daemon |
 
-## Time Format (--in)
+## Time Formats
 
-- `30s` - 30 seconds
+**--in (one-time):**
 - `5m` - 5 minutes
 - `1h` - 1 hour
 - `2d` - 2 days
 - `1h30m` - 1 hour 30 minutes
 
-## Running the Scheduler
+**--cron (recurring):**
+- `0 9 * * *` - every day at 9am
+- `0 10 * * 1` - every Monday at 10am
+- `*/15 * * * *` - every 15 minutes
 
-Jobs only trigger when the scheduler runs. Options:
+## Requirements
 
-```bash
-# Option 1: Daemon (recommended)
-lp-cron daemon &
-
-# Option 2: System cron (add to crontab -e)
-* * * * * /path/to/lp-cron tick -q
-
-# Option 3: Manual check
-lp-cron tick
-```
+- `at` for one-time: `sudo apt install at && sudo systemctl enable --now atd`
+- `cron` for recurring (usually pre-installed)
 
 ## Example Flow
 
@@ -92,10 +79,7 @@ lp-cron tick
 # You want a reminder in 1 hour
 PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
 lp-cron add "Time to check if tests passed" --in "1h" \
-  --deliver "tmux send-keys -t $PANE '\$MSG' Enter"
-
-# Make sure daemon is running
-lp-cron daemon &
+  --deliver "tmux send-keys -t $PANE '\$MSG' && sleep 1 && tmux send-keys -t $PANE Enter"
 
 # ... 1 hour later ...
 # You receive: [Reminder] Time to check if tests passed

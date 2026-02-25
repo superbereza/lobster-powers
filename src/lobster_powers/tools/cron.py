@@ -1,39 +1,40 @@
 #!/usr/bin/env python3
-r"""
-lp-cron: Schedule reminders for AI agents.
+"""
+lp-cron: Schedule reminders for AI agents using system at/cron.
 
+Thin wrapper over system `at` (one-time) and `crontab` (recurring).
 The agent provides a delivery command that injects the message back into its context.
 
 Examples:
-    # Schedule with delivery command
-    lp-cron add "Check tests" --in "1h" --deliver "tmux send-keys -t mypane '\$MSG' Enter"
+    # One-time (uses `at`)
+    lp-cron add "Check tests" --in "1h" --deliver "tmux send-keys -t pane '\$MSG' Enter"
 
-    # List jobs
+    # Recurring (uses crontab)
+    lp-cron add "Daily standup" --cron "0 10 * * *" --deliver "tmux send-keys -t pane '\$MSG' Enter"
+
+    # List all jobs
     lp-cron list
 
-    # Run daemon (checks every 30s)
-    lp-cron daemon
+    # Remove a job
+    lp-cron remove <id>
 
-    # Single tick (for system cron)
-    lp-cron tick
+Requirements:
+    - `at` package for one-time jobs: sudo apt install at
+    - `cron` for recurring jobs (usually pre-installed)
 """
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
-import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
 JOBS_FILE = Path.home() / ".local" / "share" / "lobster-powers" / "cron-jobs.json"
-PID_FILE = Path.home() / ".local" / "share" / "lobster-powers" / "cron-daemon.pid"
 
 
 def load_jobs() -> dict:
-    """Load jobs from storage."""
+    """Load jobs metadata from storage."""
     if not JOBS_FILE.exists():
         return {"jobs": [], "next_id": 1}
     try:
@@ -43,14 +44,14 @@ def load_jobs() -> dict:
 
 
 def save_jobs(data: dict) -> None:
-    """Save jobs to storage."""
+    """Save jobs metadata to storage."""
     JOBS_FILE.parent.mkdir(parents=True, exist_ok=True)
     JOBS_FILE.write_text(json.dumps(data, indent=2))
 
 
-def parse_duration(duration: str) -> timedelta:
-    """Parse duration string like '1h', '30m', '2d', '1h30m'."""
-    pattern = r'(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?'
+def parse_duration_to_at(duration: str) -> str:
+    """Convert duration like '1h', '30m', '2d' to `at` format."""
+    pattern = r'^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$'
     match = re.fullmatch(pattern, duration.strip().lower())
 
     if not match or not any(match.groups()):
@@ -61,63 +62,106 @@ def parse_duration(duration: str) -> timedelta:
     minutes = int(match.group(3) or 0)
     seconds = int(match.group(4) or 0)
 
-    return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+    # Convert to minutes for `at` (it doesn't do seconds well)
+    total_minutes = days * 24 * 60 + hours * 60 + minutes + (1 if seconds > 0 else 0)
+
+    if total_minutes < 1:
+        total_minutes = 1
+
+    return f"now + {total_minutes} minutes"
 
 
-def execute_delivery(job: dict) -> bool:
-    """Execute the delivery command for a job."""
-    deliver_cmd = job.get("deliver")
-    if not deliver_cmd:
-        print(f"Job #{job['id']} has no delivery command", file=sys.stderr)
-        return False
-
-    # Substitute $MSG with the message
-    msg = f"[Reminder] {job['text']}"
-    cmd = deliver_cmd.replace("$MSG", msg)
-
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"Delivery failed for job #{job['id']}: {result.stderr}", file=sys.stderr)
-            return False
-        return True
-    except Exception as e:
-        print(f"Delivery error for job #{job['id']}: {e}", file=sys.stderr)
-        return False
+def build_delivery_command(deliver: str, message: str) -> str:
+    """Build the delivery command with $MSG substituted."""
+    reminder_text = f"[Reminder] {message}"
+    return deliver.replace("$MSG", reminder_text)
 
 
 def cmd_add(args) -> None:
     """Add a new job."""
     if not args.deliver:
-        print("Error: --deliver is required. Provide a command to deliver the reminder to you.", file=sys.stderr)
-        print("Example: --deliver \"tmux send-keys -t mypane '\\$MSG' Enter\"", file=sys.stderr)
+        print("Error: --deliver is required.", file=sys.stderr)
+        print('Example: --deliver "tmux send-keys -t mypane \'\\$MSG\' Enter"', file=sys.stderr)
         sys.exit(1)
 
-    try:
-        delta = parse_duration(args.duration)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+    if not args.duration and not args.cron:
+        print("Error: specify --in or --cron", file=sys.stderr)
         sys.exit(1)
-
-    trigger_at = datetime.now() + delta
 
     data = load_jobs()
     job_id = data["next_id"]
     data["next_id"] += 1
 
+    delivery_cmd = build_delivery_command(args.deliver, args.text)
+
     job = {
         "id": job_id,
         "text": args.text,
         "deliver": args.deliver,
-        "trigger_at": trigger_at.isoformat(),
-        "created": datetime.now().isoformat(),
     }
+
+    if args.duration:
+        # One-time job using `at`
+        try:
+            at_time = parse_duration_to_at(args.duration)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        try:
+            # at_time is like "now + 5 minutes"
+            proc = subprocess.run(
+                f"at -M {at_time}",
+                shell=True,
+                input=delivery_cmd,
+                text=True,
+                capture_output=True,
+            )
+            if proc.returncode != 0:
+                print(f"Error scheduling with at: {proc.stderr}", file=sys.stderr)
+                sys.exit(1)
+
+            # Parse at job ID from stderr (format: "job N at ...")
+            at_output = proc.stderr.strip()
+            at_job_match = re.search(r'job (\d+)', at_output)
+            if at_job_match:
+                job["at_job_id"] = at_job_match.group(1)
+
+            job["type"] = "at"
+            job["schedule"] = args.duration
+
+        except FileNotFoundError:
+            print("Error: 'at' command not found.", file=sys.stderr)
+            print("Install with: sudo apt install at", file=sys.stderr)
+            print("Then start the service: sudo systemctl enable --now atd", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.cron:
+        # Recurring job using crontab
+        job["type"] = "cron"
+        job["schedule"] = args.cron
+
+        cron_line = f'{args.cron} {delivery_cmd} # lp-cron-{job_id}'
+
+        try:
+            result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+            existing = result.stdout if result.returncode == 0 else ""
+            new_crontab = existing.rstrip() + "\n" + cron_line + "\n"
+
+            proc = subprocess.run(["crontab", "-"], input=new_crontab, text=True, capture_output=True)
+            if proc.returncode != 0:
+                print(f"Error adding to crontab: {proc.stderr}", file=sys.stderr)
+                sys.exit(1)
+
+        except Exception as e:
+            print(f"Error adding to crontab: {e}", file=sys.stderr)
+            sys.exit(1)
 
     data["jobs"].append(job)
     save_jobs(data)
 
     print(f"Scheduled #{job_id}: {args.text}")
-    print(f"  Triggers: {trigger_at.strftime('%Y-%m-%d %H:%M:%S')} (in {args.duration})")
+    print(f"  Type: {job['type']}, Schedule: {job['schedule']}")
 
 
 def cmd_list(args) -> None:
@@ -128,18 +172,15 @@ def cmd_list(args) -> None:
         print("No jobs scheduled.")
         return
 
-    now = datetime.now()
     print("Scheduled jobs:")
     for job in data["jobs"]:
-        trigger = datetime.fromisoformat(job["trigger_at"])
-        remaining = trigger - now
-        if remaining.total_seconds() > 0:
-            status = f"in {int(remaining.total_seconds() // 60)}m"
-        else:
-            status = "pending trigger"
+        job_type = job.get("type", "unknown")
+        schedule = job.get("schedule", "?")
+        at_id = job.get("at_job_id", "")
+        at_info = f" (at job {at_id})" if at_id else ""
 
-        print(f"  #{job['id']} {job['text']}")
-        print(f"      Triggers: {trigger.strftime('%H:%M:%S')} ({status})")
+        print(f"  #{job['id']} [{job_type}] {job['text']}")
+        print(f"      Schedule: {schedule}{at_info}")
 
 
 def cmd_remove(args) -> None:
@@ -150,6 +191,20 @@ def cmd_remove(args) -> None:
     if not job:
         print(f"Job #{args.job_id} not found.", file=sys.stderr)
         sys.exit(1)
+
+    # Remove from system
+    if job.get("type") == "at" and job.get("at_job_id"):
+        subprocess.run(["atrm", str(job["at_job_id"])], capture_output=True)
+
+    elif job.get("type") == "cron":
+        try:
+            result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+            if result.returncode == 0:
+                marker = f"# lp-cron-{job['id']}"
+                lines = [l for l in result.stdout.splitlines() if marker not in l]
+                subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True)
+        except Exception:
+            pass
 
     data["jobs"] = [j for j in data["jobs"] if j["id"] != args.job_id]
     save_jobs(data)
@@ -165,106 +220,19 @@ def cmd_run(args) -> None:
         print(f"Job #{args.job_id} not found.", file=sys.stderr)
         sys.exit(1)
 
-    if execute_delivery(job):
+    delivery_cmd = build_delivery_command(job["deliver"], job["text"])
+
+    result = subprocess.run(delivery_cmd, shell=True, capture_output=True, text=True)
+    if result.returncode == 0:
         print(f"Delivered: {job['text']}")
-        # Remove one-time job after execution
-        data["jobs"] = [j for j in data["jobs"] if j["id"] != args.job_id]
-        save_jobs(data)
     else:
-        print("Delivery failed", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_tick(args) -> None:
-    """Check and execute due jobs (single pass)."""
-    data = load_jobs()
-    now = datetime.now()
-    triggered = []
-
-    for job in data["jobs"]:
-        trigger_at = datetime.fromisoformat(job["trigger_at"])
-        if trigger_at <= now:
-            if execute_delivery(job):
-                triggered.append(job["id"])
-                print(f"Triggered #{job['id']}: {job['text']}")
-            else:
-                print(f"Failed to deliver #{job['id']}", file=sys.stderr)
-
-    if triggered:
-        data["jobs"] = [j for j in data["jobs"] if j["id"] not in triggered]
-        save_jobs(data)
-
-    if not triggered and not args.quiet:
-        print("No jobs due.")
-
-
-def cmd_daemon(args) -> None:
-    """Run daemon that checks jobs every interval."""
-    interval = args.interval
-
-    # Check if already running
-    if PID_FILE.exists():
-        try:
-            pid = int(PID_FILE.read_text().strip())
-            os.kill(pid, 0)  # Check if process exists
-            print(f"Daemon already running (PID {pid})", file=sys.stderr)
-            sys.exit(1)
-        except (ProcessLookupError, ValueError):
-            pass  # Process doesn't exist, continue
-
-    # Write PID
-    PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PID_FILE.write_text(str(os.getpid()))
-
-    print(f"Daemon started (PID {os.getpid()}), checking every {interval}s")
-
-    try:
-        while True:
-            data = load_jobs()
-            now = datetime.now()
-            triggered = []
-
-            for job in data["jobs"]:
-                trigger_at = datetime.fromisoformat(job["trigger_at"])
-                if trigger_at <= now:
-                    if execute_delivery(job):
-                        triggered.append(job["id"])
-                        print(f"[{now.strftime('%H:%M:%S')}] Triggered #{job['id']}: {job['text']}")
-
-            if triggered:
-                data["jobs"] = [j for j in data["jobs"] if j["id"] not in triggered]
-                save_jobs(data)
-
-            time.sleep(interval)
-    except KeyboardInterrupt:
-        print("\nDaemon stopped")
-    finally:
-        if PID_FILE.exists():
-            PID_FILE.unlink()
-
-
-def cmd_stop(args) -> None:
-    """Stop the daemon."""
-    if not PID_FILE.exists():
-        print("Daemon not running")
-        return
-
-    try:
-        pid = int(PID_FILE.read_text().strip())
-        os.kill(pid, 15)  # SIGTERM
-        print(f"Stopped daemon (PID {pid})")
-        PID_FILE.unlink()
-    except ProcessLookupError:
-        print("Daemon not running (stale PID file)")
-        PID_FILE.unlink()
-    except Exception as e:
-        print(f"Error stopping daemon: {e}", file=sys.stderr)
+        print(f"Delivery failed: {result.stderr}", file=sys.stderr)
         sys.exit(1)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Schedule reminders for AI agents",
+        description="Schedule reminders for AI agents (uses system at/cron)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -273,8 +241,8 @@ def main():
     # add
     add_parser = subparsers.add_parser("add", help="Schedule a reminder")
     add_parser.add_argument("text", help="Reminder text")
-    add_parser.add_argument("--in", dest="duration", required=True,
-                           help="When to trigger (e.g., '1h', '30m', '2d')")
+    add_parser.add_argument("--in", dest="duration", help="One-time delay (e.g., '1h', '30m', '2d')")
+    add_parser.add_argument("--cron", help="Recurring cron expression (e.g., '0 9 * * *')")
     add_parser.add_argument("--deliver", required=True,
                            help="Command to deliver reminder ($MSG will be substituted)")
     add_parser.set_defaults(func=cmd_add)
@@ -288,25 +256,10 @@ def main():
     rm_parser.add_argument("job_id", type=int, help="Job ID to remove")
     rm_parser.set_defaults(func=cmd_remove)
 
-    # run (test delivery)
+    # run (test)
     run_parser = subparsers.add_parser("run", help="Run job immediately (test)")
     run_parser.add_argument("job_id", type=int, help="Job ID to run")
     run_parser.set_defaults(func=cmd_run)
-
-    # tick (single check)
-    tick_parser = subparsers.add_parser("tick", help="Check and trigger due jobs")
-    tick_parser.add_argument("-q", "--quiet", action="store_true", help="Suppress 'no jobs' message")
-    tick_parser.set_defaults(func=cmd_tick)
-
-    # daemon
-    daemon_parser = subparsers.add_parser("daemon", help="Run background daemon")
-    daemon_parser.add_argument("--interval", type=int, default=30,
-                              help="Check interval in seconds (default: 30)")
-    daemon_parser.set_defaults(func=cmd_daemon)
-
-    # stop
-    stop_parser = subparsers.add_parser("stop", help="Stop the daemon")
-    stop_parser.set_defaults(func=cmd_stop)
 
     args = parser.parse_args()
     args.func(args)
