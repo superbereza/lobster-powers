@@ -172,8 +172,9 @@ async def run_daemon(headless: bool = False):
                         result = {"status": "error", "error": f"Tab not found: {tab_id}"}
 
                 elif action == "snapshot":
-                    snapshot = await page.accessibility.snapshot()
-                    result["snapshot"] = format_snapshot(snapshot)
+                    # Use new aria_snapshot API (accessibility.snapshot was removed in Playwright 1.58)
+                    snapshot = await page.locator('body').aria_snapshot()
+                    result["snapshot"] = snapshot
 
                 elif action == "screenshot":
                     fd, path = tempfile.mkstemp(suffix=".png")
